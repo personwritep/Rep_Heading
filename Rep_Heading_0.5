@@ -1,0 +1,162 @@
+// ==UserScript==
+// @name        Rep Heading ⭐
+// @namespace        http://tampermonkey.net/
+// @version        0.5
+// @description        記事デザインの「h2」「h3」「テキスト」を「Ctrl+左Click」で変換する
+// @author        Ameba Blog User
+// @match        https://blog.ameba.jp/ucs/entry/srventryinsertinput.do*
+// @match        https://blog.ameba.jp/ucs/entry/srventryupdateinput.do*
+// @icon        https://www.google.com/s2/favicons?sz=64&domain=ameblo.jp
+// @grant        none
+// @updateURL        https://github.com/personwritep/Rep_Heading/raw/main/Rep_Heading.user.js
+// @downloadURL        https://github.com/personwritep/Rep_Heading/raw/main/Rep_Heading.user.js
+// ==/UserScript==
+
+
+let listen=Symbol();
+
+
+let retry=0;
+let interval=setInterval(wait_target, 100);
+function wait_target(){
+    retry++;
+    if(retry>10){ // リトライ制限 10回 1sec
+        clearInterval(interval); }
+    let target=document.getElementById('cke_1_contents'); // 監視 target
+    if(target){
+        main(); }}
+
+
+
+function main(){
+    let target=document.getElementById('cke_1_contents'); // 監視 target
+    let monitor=new MutationObserver(tag_manager);
+    monitor.observe(target, {childList: true});
+
+    tag_manager();
+
+} // main()
+
+
+
+function tag_manager(){
+    let style=
+        '<style class="rep_head">h2::before { content: "h2"; position: absolute; left: -36px; '+
+        'padding: 2px 4px 0; height: 18px; font: bold 16px/19px Meiryo; '+
+        'border: 1px solid #aaa; background: #fff; color: red; } '+
+        'h3::before { content: "h3"; position: absolute; left: -36px; '+
+        'padding: 2px 4px 0; height: 18px; font: bold 16px/19px Meiryo; '+
+        'border: 1px solid #aaa; background: #fff; color: #000; } '+
+        'h4::before { content: "h4"; position: absolute; left: -36px; '+
+        'padding: 2px 4px 0; height: 18px; font: bold 16px/19px Meiryo; '+
+        'border: 1px solid #aaa; background: #fff; color: #888; }</style>';
+
+    let editor_iframe=document.querySelector('.cke_wysiwyg_frame');
+    if(editor_iframe){
+        let iframe_doc=editor_iframe.contentWindow.document;
+        if(iframe_doc){
+            if(!iframe_doc.querySelector('.rep_head')){
+                iframe_doc.documentElement.insertAdjacentHTML('beforeend', style); }
+
+            replace_tag();
+
+        }}
+
+} // tag_manager()
+
+
+
+function replace_tag(){
+    let editor_iframe=document.querySelector('.cke_wysiwyg_frame');
+    if(editor_iframe){
+        let iframe_doc=editor_iframe.contentWindow.document;
+        if(iframe_doc){
+
+            if(!iframe_doc[listen]){
+                iframe_doc.addEventListener('click', select_tag);
+                iframe_doc[listen]=true; }
+
+            function select_tag(event){
+                let design_elem=event.target.closest('[data-entrydesign-count-input="part"]');
+                if(design_elem && design_elem.matches('div, h2, h3')){
+                    rp_action(event, design_elem); }}
+
+
+            function rp_action(event, design_elem){
+                type_heading(event, design_elem);
+                type_block(event, design_elem);
+                mend_selection(design_elem); // 選択状態の修復
+
+            } // rp_action()
+
+
+
+            function type_heading(event, design_elem){
+                if(design_elem.dataset.entrydesignType==='heading' && event.ctrlKey){
+                    event.stopImmediatePropagation();
+                    rep_tag(design_elem); }}
+
+
+            function rep_tag(element){
+                let alt_elem=element.outerHTML.toString();
+
+                if(witch_h(element)==2){
+                    alt_elem=alt_elem.replace(/^<h2/, '<h3').replace(/h2>$/, 'h3>'); }
+                else if(witch_h(element)==3){
+                    alt_elem=alt_elem.replace(/^<h3/, '<div').replace(/h3>$/, 'div>'); }
+                else if(witch_h(element)==0){
+                    alt_elem=alt_elem.replace(/^<div/, '<h2').replace(/div>$/, 'h2>'); }
+
+                element.outerHTML=alt_elem; } // rep_tag() h2➔h3➔div の書換
+
+
+
+            function type_block(event, design_elem){
+                if(design_elem.dataset.entrydesignType==='block' && event.ctrlKey){
+                    event.stopImmediatePropagation();
+                    rep_ptag(design_elem); }}
+
+
+            function rep_ptag(element){
+                let p_elem=element.querySelector('[data-entrydesign-content] :last-child');
+                if(p_elem){
+                    let alt_elem=p_elem.outerHTML.toString();
+
+                    if(witch_h(p_elem)==2){
+                        alt_elem=alt_elem.replace(/^<h2/, '<h3').replace(/h2>$/, 'h3>'); }
+                    else if(witch_h(p_elem)==3){
+                        alt_elem=alt_elem.replace(/^<h3/, '<p').replace(/h3>$/, 'p>'); }
+                    else if(witch_h(p_elem)==0){
+                        alt_elem=alt_elem.replace(/^<p/, '<h2').replace(/p>$/, 'h2>'); }
+
+                    p_elem.outerHTML=alt_elem; }} // rep_ptag() h2➔h3➔p の書換
+
+
+
+            function witch_h(elem){
+                if(elem.tagName=='H2'){
+                    return 2; }
+                else if(elem.tagName=='H3'){
+                    return 3; }
+                else return 0; }
+
+
+
+            function mend_selection(design_elem){
+                let content=design_elem.querySelector('[data-entrydesign-content]');
+                if(content){
+                    if(content.querySelector('h2, h3')){
+                        content=content.querySelector('h2, h3');
+                        content.style.margin='0';
+                        content.style.lineHeight='inherit';
+                        content.style.fontSize='inherit'; }
+
+                    let selection=iframe_doc.getSelection();
+                    let range=iframe_doc.createRange();
+                    range.selectNodeContents(content);
+                    selection.removeAllRanges();
+                    selection.addRange(range); }}
+
+        }}
+
+} // replace_tag()

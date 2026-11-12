@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Rep Heading ⭐
 // @namespace        http://tampermonkey.net/
-// @version        0.4
+// @version        0.5
 // @description        記事デザインの「h2」「h3」「テキスト」を「Ctrl+左Click」で変換する
 // @author        Ameba Blog User
 // @match        https://blog.ameba.jp/ucs/entry/srventryinsertinput.do*
@@ -11,6 +11,9 @@
 // @updateURL        https://github.com/personwritep/Rep_Heading/raw/main/Rep_Heading.user.js
 // @downloadURL        https://github.com/personwritep/Rep_Heading/raw/main/Rep_Heading.user.js
 // ==/UserScript==
+
+
+let listen=Symbol();
 
 
 let retry=0;
@@ -53,18 +56,11 @@ function tag_manager(){
         let iframe_doc=editor_iframe.contentWindow.document;
         if(iframe_doc){
             if(!iframe_doc.querySelector('.rep_head')){
-                iframe_doc.documentElement.insertAdjacentHTML('beforeend', style); }}}
+                iframe_doc.documentElement.insertAdjacentHTML('beforeend', style); }
 
+            replace_tag();
 
-    if(editor_iframe){
-        let iframe_doc=editor_iframe.contentWindow.document;
-        if(iframe_doc){
-            let target=iframe_doc.body; // 監視 target
-            if(target){
-                let monitor=new MutationObserver(replace_tag);
-                monitor.observe(target, {childList: true}); }}}
-
-    replace_tag();
+        }}
 
 } // tag_manager()
 
@@ -76,13 +72,29 @@ function replace_tag(){
         let iframe_doc=editor_iframe.contentWindow.document;
         if(iframe_doc){
 
-            let h_elem=iframe_doc.querySelectorAll('[data-entrydesign-type="heading"]');
-            for(let k=0; k<h_elem.length; k++){
-                h_elem[k].onclick=function(event){
-                    if(event.ctrlKey){
-                        event.stopImmediatePropagation();
-                        rep_tag(h_elem[k]);
-                        rep_tag_mend(k); }}}
+            if(!iframe_doc[listen]){
+                iframe_doc.addEventListener('click', select_tag);
+                iframe_doc[listen]=true; }
+
+            function select_tag(event){
+                let design_elem=event.target.closest('[data-entrydesign-count-input="part"]');
+                if(design_elem && design_elem.matches('div, h2, h3')){
+                    rp_action(event, design_elem); }}
+
+
+            function rp_action(event, design_elem){
+                type_heading(event, design_elem);
+                type_block(event, design_elem);
+                mend_selection(design_elem); // 選択状態の修復
+
+            } // rp_action()
+
+
+
+            function type_heading(event, design_elem){
+                if(design_elem.dataset.entrydesignType==='heading' && event.ctrlKey){
+                    event.stopImmediatePropagation();
+                    rep_tag(design_elem); }}
 
 
             function rep_tag(element){
@@ -98,22 +110,11 @@ function replace_tag(){
                 element.outerHTML=alt_elem; } // rep_tag() h2➔h3➔div の書換
 
 
-            function rep_tag_mend(n){
-                let h_elem=iframe_doc.querySelectorAll('[data-entrydesign-type="heading"]');
-                if(h_elem[n]){
-                    let content=h_elem[n].querySelector('[data-entrydesign-content]');
-                    if(content){
-                        get(content); }}}
 
-
-
-            let hd_elem=iframe_doc.querySelectorAll('[data-entrydesign-type="block"]');
-            for(let k=0; k<hd_elem.length; k++){
-                hd_elem[k].onclick=function(event){
-                    if(event.ctrlKey){
-                        event.stopImmediatePropagation();
-                        rep_ptag(hd_elem[k]);
-                        rep_ptag_mend(hd_elem[k]); }}}
+            function type_block(event, design_elem){
+                if(design_elem.dataset.entrydesignType==='block' && event.ctrlKey){
+                    event.stopImmediatePropagation();
+                    rep_ptag(design_elem); }}
 
 
             function rep_ptag(element){
@@ -131,15 +132,6 @@ function replace_tag(){
                     p_elem.outerHTML=alt_elem; }} // rep_ptag() h2➔h3➔p の書換
 
 
-            function rep_ptag_mend(element){
-                let p_elem=element.querySelector('[data-entrydesign-content] :last-child');
-                if(p_elem){
-                    p_elem.style.margin='0';
-                    p_elem.style.lineHeight='inherit';
-                    p_elem.style.fontSize='inherit';
-                    get(p_elem); }}
-
-
 
             function witch_h(elem){
                 if(elem.tagName=='H2'){
@@ -150,17 +142,21 @@ function replace_tag(){
 
 
 
-            let d_content=iframe_doc.querySelectorAll('[data-entrydesign-content]');
-            for(let k=0; k<d_content.length; k++){
-                d_content[k].addEventListener('click', function(){
-                    get(d_content[k]); }); }
+            function mend_selection(design_elem){
+                let content=design_elem.querySelector('[data-entrydesign-content]');
+                if(content){
+                    if(content.querySelector('h2, h3')){
+                        content=content.querySelector('h2, h3');
+                        content.style.margin='0';
+                        content.style.lineHeight='inherit';
+                        content.style.fontSize='inherit'; }
 
+                    let selection=iframe_doc.getSelection();
+                    let range=iframe_doc.createRange();
+                    range.selectNodeContents(content);
+                    selection.removeAllRanges();
+                    selection.addRange(range); }}
 
-            function get(elem){
-                let selection=iframe_doc.getSelection();
-                let range=iframe_doc.createRange();
-                range.selectNodeContents(elem);
-                selection.removeAllRanges();
-                selection.addRange(range); }
+        }}
 
-        }}} // replace_tag()
+} // replace_tag()
